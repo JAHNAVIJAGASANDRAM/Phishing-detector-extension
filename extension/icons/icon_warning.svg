@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <path d="M50 5 L95 85 L5 85 Z" 
+        fill="#F44336" 
+        stroke="#fff" 
+        stroke-width="5"/>
+  <path d="M47 25 L53 25 L53 60 L47 60 Z M47 65 L53 65 L53 75 L47 75 Z" 
+        fill="#fff"/>
+</svg> 

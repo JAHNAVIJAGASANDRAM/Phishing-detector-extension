@@ -1,0 +1,9 @@
+{
+  "name": "icon-converter",
+  "version": "1.0.0",
+  "description": "Convert SVG icons to PNG for Chrome extension",
+  "main": "convert.js",
+  "dependencies": {
+    "sharp": "^0.32.6"
+  }
+} 
