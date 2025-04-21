@@ -1,127 +1,133 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from sklearn.ensemble import RandomForestClassifier
-import pandas as pd
-import numpy as np
-from bs4 import BeautifulSoup
-import requests
-import re
+from feature_extraction import FeatureExtractor
 import joblib
-import os
-from urllib.parse import urlparse
+import json
 
 app = Flask(__name__)
 CORS(app)
 
-# Initialize the model
-model = RandomForestClassifier(n_estimators=100, random_state=42)
+# Load the models
+rf_model = joblib.load('models/random_forest_model.pkl')
+dt_model = joblib.load('models/decision_tree_model.pkl')
+print("Models loaded successfully!")
 
-def extract_features(url):
-    features = {}
+def analyze_url(url):
+    # Extract features
+    extractor = FeatureExtractor()
+    features = extractor.extract_url_features(url)
+    print(f"Analyzing URL: {url}")
+    print(f"Extracted features: {features}")
     
-    try:
-        # URL-based features
-        parsed = urlparse(url)
-        features['domain_length'] = len(parsed.netloc)
-        features['path_length'] = len(parsed.path)
-        features['subdomain_count'] = len(parsed.netloc.split('.')) - 1
-        features['has_https'] = 1 if parsed.scheme == 'https' else 0
-        
-        # Content-based features
-        try:
-            response = requests.get(url, timeout=5)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Form features
-            features['form_count'] = len(soup.find_all('form'))
-            features['input_count'] = len(soup.find_all('input'))
-            features['external_links'] = len([a for a in soup.find_all('a', href=True) 
-                                           if urlparse(a['href']).netloc 
-                                           and urlparse(a['href']).netloc != parsed.netloc])
-            
-            # Security indicators
-            features['has_password_field'] = 1 if soup.find('input', {'type': 'password'}) else 0
-            features['has_submit_button'] = 1 if soup.find('input', {'type': 'submit'}) else 0
-            
-        except:
-            # If we can't fetch the page, set content features to -1
-            features['form_count'] = -1
-            features['input_count'] = -1
-            features['external_links'] = -1
-            features['has_password_field'] = -1
-            features['has_submit_button'] = -1
-    
-    except:
-        return None
-    
-    return features
+    # Convert features to list in correct order for model
+    feature_list = []
+    for feature in ['url_length', 'num_dots', 'num_hyphens', 'num_underscores', 
+                   'num_slashes', 'num_digits', 'num_special_chars', 'domain_length',
+                   'path_length', 'has_https', 'has_suspicious_tld', 
+                   'has_suspicious_keywords', 'has_brand_name', 'has_mixed_nums_chars',
+                   'num_subdomains']:
+        feature_list.append(features.get(feature, 0))
 
-def train_model():
-    # For demonstration, we'll create a simple synthetic dataset
-    # In production, you should use a real phishing dataset
-    np.random.seed(42)
-    n_samples = 1000
+    # Get model predictions
+    rf_pred = rf_model.predict([feature_list])[0]
+    dt_pred = dt_model.predict([feature_list])[0]
     
-    # Generate synthetic data
-    data = {
-        'domain_length': np.random.randint(5, 30, n_samples),
-        'path_length': np.random.randint(0, 50, n_samples),
-        'subdomain_count': np.random.randint(0, 4, n_samples),
-        'has_https': np.random.randint(0, 2, n_samples),
-        'form_count': np.random.randint(0, 5, n_samples),
-        'input_count': np.random.randint(0, 10, n_samples),
-        'external_links': np.random.randint(0, 20, n_samples),
-        'has_password_field': np.random.randint(0, 2, n_samples),
-        'has_submit_button': np.random.randint(0, 2, n_samples)
+    # Calculate confidence based on risk factors
+    risk_score = 0
+    risk_factors = []
+    
+    # Check for random-looking strings (higher weight)
+    if features.get('has_random_strings', 0):
+        risk_score += 0.4
+        risk_factors.append("Random-looking strings detected in URL")
+    
+    # Check for complex query parameters
+    if features.get('has_complex_query', 0):
+        risk_score += 0.2
+        risk_factors.append("Suspicious query parameters")
+    
+    # Check for encoded strings (higher weight)
+    if features.get('has_encoded_strings', 0):
+        risk_score += 0.3
+        risk_factors.append("Suspicious encoded strings")
+    
+    # Check for suspicious TLD (higher weight)
+    if features.get('has_suspicious_tld', 0):
+        risk_score += 0.3
+        risk_factors.append("Suspicious top-level domain")
+    
+    # Check for suspicious keywords (higher weight)
+    if features.get('has_suspicious_keywords', 0):
+        risk_score += 0.3
+        risk_factors.append("Suspicious keywords found")
+
+    # Check for mixed numbers and characters in domain
+    if features.get('has_mixed_nums_chars', 0):
+        risk_score += 0.2
+        risk_factors.append("Suspicious mix of numbers and letters in domain")
+
+    # Check for excessive subdomains
+    if features.get('num_subdomains', 0) > 2:
+        risk_score += 0.2
+        risk_factors.append("Excessive number of subdomains")
+
+    # Check for suspicious URL encoding
+    if features.get('has_suspicious_encoding', 0):
+        risk_score += 0.3
+        risk_factors.append("Suspicious URL encoding detected")
+
+    # Check for IP address instead of domain
+    if features.get('has_ip_address', 0):
+        risk_score += 0.4
+        risk_factors.append("IP address used instead of domain name")
+
+    # Check for unusually long domain
+    if features.get('domain_length', 0) > 30:
+        risk_score += 0.2
+        risk_factors.append("Unusually long domain name")
+
+    # Check for short domain segments (like URL shorteners)
+    if features.get('has_short_domain', 0):
+        risk_score += 0.2
+        risk_factors.append("Suspicious short domain segments")
+
+    # If multiple risk factors are present, increase the risk score
+    if len(risk_factors) >= 3:
+        risk_score = min(1.0, risk_score * 1.5)  # Increase score but cap at 1.0
+
+    # Determine if it's phishing based on risk score (lower threshold)
+    is_phishing = risk_score >= 0.3 or rf_pred or dt_pred
+
+    result = {
+        'is_phishing': is_phishing,
+        'confidence': risk_score,
+        'risk_factors': risk_factors,
+        'model_votes': {
+            'random_forest': bool(rf_pred),
+            'decision_tree': bool(dt_pred)
+        }
     }
     
-    # Create more sophisticated rules for labeling
-    df = pd.DataFrame(data)
-    df['is_phishing'] = ((df['has_password_field'] == 1) & 
-                        (df['external_links'] > 10) & 
-                        (df['has_https'] == 0) & 
-                        (df['subdomain_count'] > 2)).astype(int)
-    
-    # Train the model
-    X = df.drop('is_phishing', axis=1)
-    y = df['is_phishing']
-    model.fit(X, y)
-    
-    # Save the model
-    joblib.dump(model, 'phishing_model.joblib')
+    print(f"ML model result: {result}")
+    return result
 
 @app.route('/analyze', methods=['POST'])
-def analyze_url():
-    data = request.get_json()
-    url = data.get('url')
-    
-    if not url:
-        return jsonify({'error': 'No URL provided'}), 400
-    
-    features = extract_features(url)
-    if features is None:
-        return jsonify({'error': 'Could not analyze URL'}), 400
-    
-    # Convert features to DataFrame
-    features_df = pd.DataFrame([features])
-    
-    # Make prediction
-    prediction = model.predict_proba(features_df)[0]
-    
-    return jsonify({
-        'url': url,
-        'phishing_probability': float(prediction[1]),
-        'is_phishing': bool(prediction[1] > 0.7),  # threshold at 70%
-        'features': features
-    })
-
-@app.route('/test', methods=['GET'])
-def test():
-    return jsonify({"status": "ok"})
+def analyze():
+    try:
+        data = request.get_json()
+        if not data or 'url' not in data:
+            return jsonify({'error': 'No URL provided'}), 400
+            
+        url = data['url']
+        print("Received analysis request")
+        
+        result = analyze_url(url)
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    if not os.path.exists('phishing_model.joblib'):
-        train_model()
-    else:
-        model = joblib.load('phishing_model.joblib')
-    app.run(port=5000, debug=True) 
+    print("Starting Flask server...")
+    app.run(host='0.0.0.0', debug=True) 
