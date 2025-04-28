@@ -1,79 +1,63 @@
 # Phishing URL Detector
 
-A machine learning-based system for detecting phishing URLs in real-time. This project includes both a backend API service and a browser extension for protecting users against phishing attacks.
+A machine learning-based system for detecting phishing URLs using multiple detection methods and risk analysis.
 
 ## Features
 
-- Real-time URL analysis
-- Machine learning-based detection using Random Forest and Decision Tree models
-- Comprehensive feature extraction from URLs
-- Browser extension for instant protection
-- RESTful API service
+- URL feature extraction
+- Machine learning models (Random Forest and Decision Tree)
+- Risk score calculation
+- Multiple validation methods
+- REST API endpoint for URL analysis
 
-## Project Structure
+## Installation
 
-```
-phishing_detector/
-├── backend/             # Flask API server
-│   ├── app.py          # Main server application
-│   ├── feature_extraction.py  # URL feature extraction
-│   └── models/         # ML model files
-└── extension/          # Browser extension files
-```
-
-## Setup
-
-1. Install Python dependencies:
+1. Clone the repository:
 ```bash
-cd backend
+git clone <repository-url>
+cd phishing_detector
+```
+
+2. Install dependencies:
+```bash
 pip install -r requirements.txt
 ```
 
-2. Start the server:
+3. Train the models:
+```bash
+python retrain_models.py
+```
+
+## Usage
+
+1. Start the server:
 ```bash
 python app.py
 ```
 
-The server will start on `http://localhost:5000`.
-
-## API Endpoints
-
-### POST /analyze
-Analyzes a URL for phishing characteristics.
-
-Request body:
-```json
-{
-    "url": "https://example.com"
-}
+2. Send POST requests to `/analyze` endpoint with URL:
+```bash
+curl -X POST http://localhost:5000/analyze -H "Content-Type: application/json" -d '{"url": "https://example.com"}'
 ```
 
-Response:
-```json
-{
-    "is_phishing": false,
-    "confidence": 0.1,
-    "risk_factors": [],
-    "model_votes": {
-        "random_forest": false,
-        "decision_tree": false
-    }
-}
-```
+## Project Structure
 
-## Browser Extension
+- `app.py` - Main Flask application
+- `models.py` - Model loading and prediction
+- `feature_extraction.py` - URL feature extraction
+- `retrain_models.py` - Model training script
+- `models/` - Directory for saved models
+- `phishing_urls.csv` - Sample phishing URLs
+- `legitimate_urls.csv` - Sample legitimate URLs
 
-The browser extension can be loaded as an unpacked extension in Chrome/Edge. It provides real-time protection by analyzing URLs as you browse.
+## Contributing
 
-## Security Notes
-
-- The system uses multiple detection methods including:
-  - Machine learning models
-  - Pattern recognition
-  - Domain analysis
-  - URL structure analysis
-  - Risk factor assessment
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the LICENSE file for details.
